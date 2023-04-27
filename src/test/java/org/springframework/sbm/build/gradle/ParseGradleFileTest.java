@@ -19,6 +19,7 @@ import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openrewrite.RecipeRun;
 import org.openrewrite.Result;
+import org.openrewrite.SourceFile;
 import org.openrewrite.gradle.GradleParser;
 import org.openrewrite.groovy.tree.G;
 import org.openrewrite.gradle.search.FindDependency;
@@ -57,8 +58,17 @@ public class ParseGradleFileTest {
                 """;
 
         List<G.CompilationUnit> parse = GradleParser.builder().build().parse(gradleFile);
-        RecipeRun run = new FindDependency("org.springframework.boot", "spring-boot-starter-web", null).run(parse);
+        RecipeRun run = new FindDependency("org.springframework.boot", "spring-boot-starter-web", null)
+                .run(parse);
+
+        SourceFile after = run.getResults().get(0).getAfter();
+        String result = after.printAll();
+        System.out.println(result);
         run.getDataTables();
+//
+//        run = new FindDependency("*", "*", null)
+//                .run(parse);
+
     }
 
 }
