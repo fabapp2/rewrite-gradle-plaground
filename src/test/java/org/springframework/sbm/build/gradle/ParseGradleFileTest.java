@@ -24,21 +24,28 @@ import org.gradle.tooling.internal.consumer.DefaultGradleConnector;
 import org.gradle.tooling.model.GradleProject;
 import org.gradle.tooling.model.build.BuildEnvironment;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.openrewrite.RecipeRun;
 import org.openrewrite.Result;
 import org.openrewrite.SourceFile;
 import org.openrewrite.gradle.GradleParser;
+import org.openrewrite.gradle.marker.GradleProjectBuilder;
+import org.openrewrite.gradle.toolingapi.GradlePluginDescriptor;
 import org.openrewrite.gradle.toolingapi.OpenRewriteModel;
 import org.openrewrite.gradle.toolingapi.OpenRewriteModelBuilder;
 import org.openrewrite.groovy.tree.G;
 import org.openrewrite.gradle.search.FindDependency;
+import org.openrewrite.internal.ListUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -109,19 +116,34 @@ public class ParseGradleFileTest {
     }
 
     @Test
-    void test_renameMe() throws IOException {
+    void jimfsTest() throws IOException {
+        FileSystem fs = Jimfs.newFileSystem(Configuration.osX());
+        Path foo = fs.getPath("/foo");
+        Files.createDirectory(foo);
+
+        Files.writeString(foo.resolve("some.txt"), "Yeah!");
+
+        System.out.println("File exists: %s".formatted(Files.exists(foo.resolve("some.txt"))));
+        String content = Files.readString(foo.resolve("some.txt"));
+        System.out.println("File contains: %s".formatted(content));
+
+//        File file = new File(foo.toString());
+//        System.out.println("Path to root is: " + foo);
+//        Arrays.stream(file.listFiles()).map(File::getAbsolutePath).collect(Collectors.joining());
+    }
+
+    @Test
+    void test_renameMe(@TempDir Path pathToStore) throws IOException {
         FileSystem fileSystem = Jimfs.newFileSystem(Configuration.osX());
-        String fileName = "build.gradle.kts";
-        Path pathToStore = fileSystem.getPath("");
-
-
-        Path filePath = pathToStore.resolve(fileName);
-        Files.writeString(filePath, GRADLE_GROOVY_FILE);
-        assertThat(Files.readString(filePath)).isEqualTo(GRADLE_GROOVY_FILE);
-        File projectDir = new File(pathToStore.toString());
+//        Path pathToStore = fileSystem.getPath("/experiment");
+//        Files.createDirectory(pathToStore);
+        String fileName = "build.gradle";
+        Path gradleBuildFile = pathToStore.resolve(fileName);
+        Files.writeString(gradleBuildFile, GRADLE_GROOVY_FILE);
+        assertThat(Files.readString(gradleBuildFile)).isEqualTo(GRADLE_GROOVY_FILE);
 
         // "openrewrite-tooling.gradle"
-        Files.writeString(Path.of("openrewrite-tooling.gradle"), """
+        Files.writeString(pathToStore.resolve("openrewrite-tooling.gradle"), """
                 initscript {
                     repositories {
                         mavenLocal()
@@ -147,11 +169,32 @@ public class ParseGradleFileTest {
                 }
                 """);
 
-        OpenRewriteModel openRewriteGradleModel = OpenRewriteModelBuilder.forProjectDirectory(projectDir);
-        assertThat(openRewriteGradleModel.gradleProject().getPlugins()).hasSize(4);
-        System.out.println(openRewriteGradleModel.gradleProject().getPlugins());
+        System.out.println("Files in dir: ");
+        String files = Files.list(pathToStore).map(Path::toString).collect(Collectors.joining("\n"));
+        System.out.println(files);
+
+        OpenRewriteModel openRewriteGradleModel = OpenRewriteModelBuilder.forProjectDirectory(pathToStore.toFile());
+        System.out.println(openRewriteGradleModel.gradleProject().getPlugins().stream().map(GradlePluginDescriptor::getId).collect(
+                Collectors.joining("\n")));
 
 
+        List<G.CompilationUnit> gradleFiles = GradleParser.builder().build().parse(Files.readString(gradleBuildFile));
+
+        G.CompilationUnit gradleFile = gradleFiles.get(0);
+
+//        gradleFile.withMarkers(gradleFile.getMarkers().add(openRewriteGradleModel));
+
+        // Problem: Creating the gradle marker requires a org.gradle.api.Project here, where does it come from?
+//        GradleProject gp = GradleProjectBuilder.gradleProject(subproject);
+//        gradleFile.withMarkers(gradleFile.getMarkers().add(gp));
+
+        
+        
+        
+        
+        
+
+/*
         // playing with Gradle tooling API (no OpenRewrite)
         DefaultGradleConnector connector = (DefaultGradleConnector) GradleConnector.newConnector();
         GradleConnector gradleConnector = connector.forProjectDirectory(projectDir);
@@ -169,9 +212,11 @@ public class ParseGradleFileTest {
         GradleProject gradleProject = connection.model(GradleProject.class).get();
         gradleProject.getTasks().getAll().stream()
                 .forEach(t -> System.out.println(t));
-        System.out.println(gradleProject.getBuildScript().getSourceFile());
+        System.out.println(gradlegradleFile);
 
         ModelBuilder<OpenRewriteModel> model = connection.model(OpenRewriteModel.class);
+
+         */
 
 
     }
