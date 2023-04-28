@@ -18,6 +18,7 @@ package org.springframework.sbm.build.gradle;
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
 import org.gradle.tooling.GradleConnector;
+import org.gradle.tooling.ModelBuilder;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.internal.consumer.DefaultGradleConnector;
 import org.gradle.tooling.model.GradleProject;
@@ -115,17 +116,48 @@ public class ParseGradleFileTest {
 
 
         Path filePath = pathToStore.resolve(fileName);
-        Files.writeString(filePath, GRADLE_KOTLIN_FILE);
-        assertThat(Files.readString(filePath)).isEqualTo(GRADLE_KOTLIN_FILE);
+        Files.writeString(filePath, GRADLE_GROOVY_FILE);
+        assertThat(Files.readString(filePath)).isEqualTo(GRADLE_GROOVY_FILE);
         File projectDir = new File(pathToStore.toString());
-//        OpenRewriteModel openRewriteGradleModel = OpenRewriteModelBuilder.forProjectDirectory(projectDir);
-//        assertThat(openRewriteGradleModel.gradleProject().getPlugins()).hasSize(4);
-//        System.out.println(openRewriteGradleModel.gradleProject().getPlugins());
 
+        // "openrewrite-tooling.gradle"
+        Files.writeString(Path.of("openrewrite-tooling.gradle"), """
+                initscript {
+                    repositories {
+                        mavenLocal()
+                        maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
+                        mavenCentral()
+                    }
+                                
+                    configurations.all {
+                        resolutionStrategy {
+                            cacheChangingModulesFor 0, 'seconds'
+                            cacheDynamicVersionsFor 0, 'seconds'
+                        }
+                    }
+                                
+                    dependencies {
+                        classpath 'org.openrewrite.gradle.tooling:plugin:latest.integration'
+                        classpath 'org.openrewrite:rewrite-maven:latest.integration'
+                    }
+                }
+                                
+                allprojects {
+                    apply plugin: org.openrewrite.gradle.toolingapi.ToolingApiOpenRewriteModelPlugin
+                }
+                """);
+
+        OpenRewriteModel openRewriteGradleModel = OpenRewriteModelBuilder.forProjectDirectory(projectDir);
+        assertThat(openRewriteGradleModel.gradleProject().getPlugins()).hasSize(4);
+        System.out.println(openRewriteGradleModel.gradleProject().getPlugins());
+
+
+        // playing with Gradle tooling API (no OpenRewrite)
         DefaultGradleConnector connector = (DefaultGradleConnector) GradleConnector.newConnector();
         GradleConnector gradleConnector = connector.forProjectDirectory(projectDir);
         gradleConnector.useGradleVersion("7.4.2");
         ProjectConnection connection = gradleConnector.connect();
+
         BuildEnvironment environment = connection.model(BuildEnvironment.class).get();
         System.out.println("==== Environment");
         System.out.println(environment.getGradle().getGradleVersion());
@@ -138,6 +170,9 @@ public class ParseGradleFileTest {
         gradleProject.getTasks().getAll().stream()
                 .forEach(t -> System.out.println(t));
         System.out.println(gradleProject.getBuildScript().getSourceFile());
+
+        ModelBuilder<OpenRewriteModel> model = connection.model(OpenRewriteModel.class);
+
 
     }
 
