@@ -21,14 +21,16 @@ import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ModelBuilder;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.internal.consumer.DefaultGradleConnector;
-import org.gradle.tooling.model.GradleProject;
 import org.gradle.tooling.model.build.BuildEnvironment;
+import org.intellij.lang.annotations.Language;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.openrewrite.RecipeRun;
 import org.openrewrite.Result;
 import org.openrewrite.SourceFile;
 import org.openrewrite.gradle.GradleParser;
+import org.openrewrite.gradle.marker.GradleDependencyConfiguration;
+import org.openrewrite.gradle.marker.GradleProject;
 import org.openrewrite.gradle.marker.GradleProjectBuilder;
 import org.openrewrite.gradle.toolingapi.GradlePluginDescriptor;
 import org.openrewrite.gradle.toolingapi.OpenRewriteModel;
@@ -36,6 +38,7 @@ import org.openrewrite.gradle.toolingapi.OpenRewriteModelBuilder;
 import org.openrewrite.groovy.tree.G;
 import org.openrewrite.gradle.search.FindDependency;
 import org.openrewrite.internal.ListUtils;
+import org.openrewrite.marker.Markers;
 
 import java.io.File;
 import java.io.IOException;
@@ -45,9 +48,12 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
 
 
 /**
@@ -82,6 +88,7 @@ public class ParseGradleFileTest {
             }
             """;
 
+    @Language("groovy")
     public static final String GRADLE_GROOVY_FILE = """
             plugins {
                 id 'java'
@@ -101,10 +108,11 @@ public class ParseGradleFileTest {
                 implementation 'org.springframework.boot:spring-boot-starter-web'
                 testImplementation 'org.springframework.boot:spring-boot-starter-test'
             }
-                            
+                      /*      
             tasks.named('test') {
                 useJUnitPlatform()
             }
+            */
             """;
 
     @Test
@@ -174,15 +182,35 @@ public class ParseGradleFileTest {
         System.out.println(files);
 
         OpenRewriteModel openRewriteGradleModel = OpenRewriteModelBuilder.forProjectDirectory(pathToStore.toFile());
+
+        System.out.println("All plugin ids from model: openRewriteGradleModel.gradleProject().getPlugins()");
         System.out.println(openRewriteGradleModel.gradleProject().getPlugins().stream().map(GradlePluginDescriptor::getId).collect(
                 Collectors.joining("\n")));
 
+        GradleProject gradleProject = GradleProject.fromToolingModel(openRewriteGradleModel.gradleProject());
+
 
         List<G.CompilationUnit> gradleFiles = GradleParser.builder().build().parse(Files.readString(gradleBuildFile));
-
         G.CompilationUnit gradleFile = gradleFiles.get(0);
+        Markers markers = gradleFile.getMarkers();
+        markers = markers.add(gradleProject);
+        gradleFile = gradleFile.withMarkers(markers);
+//        gradleFile.getMarkers().add(gradleProject);
+        Optional<GradleProject> optionalGradleMarker = gradleFile.getMarkers().findFirst(GradleProject.class);
 
-//        gradleFile.withMarkers(gradleFile.getMarkers().add(openRewriteGradleModel));
+        if(!optionalGradleMarker.isPresent()) {
+            fail("No marker found");
+        }
+
+        List<GradleDependencyConfiguration> config = (List<GradleDependencyConfiguration>) optionalGradleMarker
+                .get()
+                .getConfigurations();
+
+        String dependenciesString = config.stream().flatMap(c -> c.getRequested().stream()).map(d -> d.getGroupId() + ":" + d.getArtifactId() + ":" + d.getVersion()).collect(Collectors.joining("\n"));
+        System.out.println("List of dependencies from GradleProject marker: gradleFile.getMarkers().findFirst(GradleProject.class).get().getConfigurations()");
+        System.out.println(dependenciesString);
+//        gradleFile.withMarke
+//        rs(gradleFile.getMarkers().add(openRewriteGradleModel));
 
         // Problem: Creating the gradle marker requires a org.gradle.api.Project here, where does it come from?
 //        GradleProject gp = GradleProjectBuilder.gradleProject(subproject);
@@ -191,7 +219,7 @@ public class ParseGradleFileTest {
         
         
         
-        
+
         
 
 /*
