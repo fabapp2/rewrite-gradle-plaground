@@ -28,6 +28,9 @@ import org.junit.jupiter.api.io.TempDir;
 import org.openrewrite.RecipeRun;
 import org.openrewrite.Result;
 import org.openrewrite.SourceFile;
+import org.openrewrite.gradle.AddDependency;
+import org.openrewrite.gradle.AddProperty;
+import org.openrewrite.gradle.ChangeDependencyVersion;
 import org.openrewrite.gradle.GradleParser;
 import org.openrewrite.gradle.marker.GradleDependencyConfiguration;
 import org.openrewrite.gradle.marker.GradleProject;
@@ -105,7 +108,7 @@ public class ParseGradleFileTest {
             }
                             
             dependencies {
-                implementation 'org.springframework.boot:spring-boot-starter-web'
+                implementation 'org.springframework.boot:spring-boot-starter-web:2.7.11'
                 testImplementation 'org.springframework.boot:spring-boot-starter-test'
             }
                       /*      
@@ -209,6 +212,25 @@ public class ParseGradleFileTest {
         String dependenciesString = config.stream().flatMap(c -> c.getRequested().stream()).map(d -> d.getGroupId() + ":" + d.getArtifactId() + ":" + d.getVersion()).collect(Collectors.joining("\n"));
         System.out.println("List of dependencies from GradleProject marker: gradleFile.getMarkers().findFirst(GradleProject.class).get().getConfigurations()");
         System.out.println(dependenciesString);
+
+        // A gradle.settings required to add properties
+        /*
+        List<Result> results = new AddProperty("theKey", "tehValue", false).run(List.of(gradleFile)).getResults();
+        String modifiedGradleFile = results
+                .get(0)
+                .getAfter()
+                .printAll();
+        System.out.println(modifiedGradleFile);
+         */
+
+        // trying ChangeDependencyVersion
+        // works only with explicit version, returns no result when 'org.springframework.boot:spring-boot-starter-web:2.7.11'
+        // is replaced with 'org.springframework.boot:spring-boot-starter-web'
+        List<Result> results = new ChangeDependencyVersion("org.springframework.boot", "spring-boot-starter-web",
+                                                           "3.0.0", null, null).run(List.of(gradleFile)).getResults();
+        String modifiedGradleFile = results.get(0).getAfter().printAll();
+        System.out.println(modifiedGradleFile);
+
 //        gradleFile.withMarke
 //        rs(gradleFile.getMarkers().add(openRewriteGradleModel));
 
